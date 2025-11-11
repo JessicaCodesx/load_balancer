@@ -108,8 +108,15 @@ public class TestBackendServer {
             socket.close();
             System.out.println(serverName + " closed connection");
             
+        } catch (java.net.SocketException e) {
+            // connection closed by client (e.g., health check) - this is normal, don't log as error
+            // silently handle - this happens during health checks
         } catch (IOException e) {
-            System.err.println("error handling client in " + serverName + ": " + e.getMessage());
+            // only log actual errors, not normal connection closures
+            if (!e.getMessage().contains("Connection reset") && 
+                !e.getMessage().contains("aborted by the software")) {
+                System.err.println("error handling client in " + serverName + ": " + e.getMessage());
+            }
         }
     }
     
