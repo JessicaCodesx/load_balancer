@@ -71,11 +71,66 @@ java LoadBalancer 8080 --algorithm least-connections localhost:9001 localhost:90
 
 ### Testing the Load Balancer
 
-To test the load balancer, you'll need to run backend servers on the ports you configure. The load balancer will:
-- Accept client connections on its configured port
-- Forward requests to backend servers
+The project includes test programs to demonstrate the load balancer. Follow these steps:
+
+#### Step 1: Start Backend Servers
+
+Open multiple terminal windows and start backend servers on different ports:
+
+**Terminal 1:**
+```
+java TestBackendServer 9001 Server1
+```
+
+**Terminal 2:**
+```
+java TestBackendServer 9002 Server2
+```
+
+**Terminal 3:**
+```
+java TestBackendServer 9003 Server3
+```
+
+Each server will listen on its port and wait for connections from the load balancer.
+
+#### Step 2: Start the Load Balancer
+
+In a new terminal, start the load balancer:
+
+```
+java LoadBalancer 8080 --algorithm round-robin localhost:9001 localhost:9002 localhost:9003
+```
+
+The load balancer will:
+- Accept client connections on port 8080
+- Forward requests to backend servers using the selected algorithm
 - Display statistics every 30 seconds
 - Perform health checks every 10 seconds
+
+#### Step 3: Test with Client
+
+In another terminal, run the test client:
+
+```
+java TestClient localhost 8080
+```
+
+You can then type messages and see them forwarded to different backend servers. Each server will identify itself in its responses, allowing you to see the load balancing in action.
+
+**Quick Test (Single Message):**
+```
+java TestClient localhost 8080 "hello world"
+```
+
+#### Testing Load Balancing
+
+To see load balancing in action:
+1. Start multiple backend servers (as shown above)
+2. Start the load balancer with round-robin algorithm
+3. Run multiple test clients or send multiple messages
+4. Observe that requests are distributed across different servers
+5. Try the least-connections algorithm to see different distribution patterns
 
 ## Code Documentation
 
@@ -90,6 +145,8 @@ load_balancer/
 ├── LeastConnectionsAlgorithm.java # Least connections implementation
 ├── HealthChecker.java              # Health checking for backend servers
 ├── LoadBalancerStats.java          # Statistics tracking
+├── TestBackendServer.java          # Test backend server for demonstration
+├── TestClient.java                 # Test client for demonstration
 └── README.md                       # This file
 ```
 
@@ -130,6 +187,20 @@ Tracks and reports:
 - Total connections established
 - Success rate percentage
 - Backend server status and active connections
+
+#### TestBackendServer.java
+Simple test backend server that:
+- Listens on a specified port
+- Responds to client connections with server identification
+- Echoes messages back to clients
+- Useful for demonstrating load balancing behavior
+
+#### TestClient.java
+Simple test client that:
+- Connects to the load balancer
+- Sends messages and receives responses
+- Supports interactive mode or single message mode
+- Helps verify load balancing distribution
 
 ### Key Networking Concepts Demonstrated
 
