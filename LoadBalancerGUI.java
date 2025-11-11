@@ -3,6 +3,7 @@ import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.*;
 import java.util.List;
 
 /**
@@ -13,12 +14,18 @@ public class LoadBalancerGUI extends JFrame {
     private volatile LoadBalancer loadBalancer;
     private Thread loadBalancerThread;
     
+    // backend server management
+    private Map<String, TestBackendServer> backendServers;
+    private Map<String, Thread> backendServerThreads;
+    
     // configuration components
     private JTextField portField;
     private JComboBox<String> algorithmCombo;
     private JTextArea backendServersArea;
     private JButton startButton;
     private JButton stopButton;
+    private JButton startBackendServersButton;
+    private JButton stopBackendServersButton;
     
     // statistics display components
     private JLabel totalRequestsLabel;
@@ -38,8 +45,22 @@ public class LoadBalancerGUI extends JFrame {
      */
     public LoadBalancerGUI() {
         setTitle("Load Balancer - COSC4436");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setLayout(new BorderLayout());
+        
+        // add window listener to clean up on close
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent windowEvent) {
+                // stop all backend servers before closing
+                stopBackendServers();
+                System.exit(0);
+            }
+        });
+        
+        // initialize backend server tracking
+        backendServers = new HashMap<>();
+        backendServerThreads = new HashMap<>();
         
         // create main panels
         createConfigPanel();
@@ -154,6 +175,9 @@ public class LoadBalancerGUI extends JFrame {
         
         // buttons
         JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new FlowLayout());
+        
+        // load balancer buttons
         startButton = new JButton("Start Load Balancer");
         stopButton = new JButton("Stop Load Balancer");
         stopButton.setEnabled(false);
@@ -161,6 +185,17 @@ public class LoadBalancerGUI extends JFrame {
         startButton.addActionListener(e -> startLoadBalancer());
         stopButton.addActionListener(e -> stopLoadBalancer());
         
+        // backend server buttons
+        startBackendServersButton = new JButton("Start Backend Servers");
+        stopBackendServersButton = new JButton("Stop Backend Servers");
+        stopBackendServersButton.setEnabled(false);
+        
+        startBackendServersButton.addActionListener(e -> startBackendServers());
+        stopBackendServersButton.addActionListener(e -> stopBackendServers());
+        
+        buttonPanel.add(startBackendServersButton);
+        buttonPanel.add(stopBackendServersButton);
+        buttonPanel.add(new JSeparator(SwingConstants.VERTICAL));
         buttonPanel.add(startButton);
         buttonPanel.add(stopButton);
         controlPanel.add(buttonPanel, BorderLayout.EAST);
@@ -344,6 +379,118 @@ public class LoadBalancerGUI extends JFrame {
             "Note: Load balancer thread will continue running.\n" +
             "Close the application to fully stop it.",
             "Info", JOptionPane.INFORMATION_MESSAGE);
+    }
+    
+    /**
+     * starts all backend servers based on configuration
+     */
+    private void startBackendServers() {
+        String[] backendLines = backendServersArea.getText().split("\n");
+        int startedCount = 0;
+        int failedCount = 0;
+        StringBuilder errors = new StringBuilder();
+        
+        for (String line : backendLines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                String[] parts = trimmed.split(":");
+                if (parts.length == 2) {
+                    try {
+                        String host = parts[0];
+                        int port = Integer.parseInt(parts[1]);
+                        String serverKey = host + ":" + port;
+                        
+                        // check if already running
+                        if (backendServers.containsKey(serverKey) && 
+                            backendServers.get(serverKey).isRunning()) {
+                            continue; // already running
+                        }
+                        
+                        // create and start backend server
+                        String serverName = "Server-" + port;
+                        TestBackendServer server = new TestBackendServer(port, serverName);
+                        Thread serverThread = new Thread(() -> server.start());
+                        serverThread.setDaemon(true);
+                        serverThread.start();
+                        
+                        // wait a moment to see if it starts successfully
+                        try {
+                            Thread.sleep(200);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                        
+                        if (server.isRunning()) {
+                            backendServers.put(serverKey, server);
+                            backendServerThreads.put(serverKey, serverThread);
+                            startedCount++;
+                        } else {
+                            failedCount++;
+                            if (errors.length() > 0) errors.append("\n");
+                            errors.append("Failed to start: ").append(serverKey);
+                        }
+                    } catch (NumberFormatException e) {
+                        failedCount++;
+                        if (errors.length() > 0) errors.append("\n");
+                        errors.append("Invalid port in: ").append(trimmed);
+                    } catch (Exception e) {
+                        failedCount++;
+                        if (errors.length() > 0) errors.append("\n");
+                        errors.append("Error starting ").append(trimmed).append(": ").append(e.getMessage());
+                    }
+                }
+            }
+        }
+        
+        // update button states
+        if (startedCount > 0) {
+            startBackendServersButton.setEnabled(false);
+            stopBackendServersButton.setEnabled(true);
+        }
+        
+        // show result
+        if (failedCount > 0) {
+            JOptionPane.showMessageDialog(this,
+                "Started " + startedCount + " backend server(s).\n\n" +
+                failedCount + " server(s) failed:\n" + errors.toString(),
+                "Partial Success", JOptionPane.WARNING_MESSAGE);
+        } else if (startedCount > 0) {
+            JOptionPane.showMessageDialog(this,
+                "Successfully started " + startedCount + " backend server(s)!",
+                "Backend Servers Started", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                "No backend servers were started. Please check your configuration.",
+                "No Servers Started", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+    
+    /**
+     * stops all backend servers
+     */
+    private void stopBackendServers() {
+        int stoppedCount = 0;
+        
+        for (Map.Entry<String, TestBackendServer> entry : backendServers.entrySet()) {
+            TestBackendServer server = entry.getValue();
+            if (server.isRunning()) {
+                server.stop();
+                stoppedCount++;
+            }
+        }
+        
+        backendServers.clear();
+        backendServerThreads.clear();
+        
+        // update button states
+        startBackendServersButton.setEnabled(true);
+        stopBackendServersButton.setEnabled(false);
+        
+        if (stoppedCount > 0) {
+            JOptionPane.showMessageDialog(this,
+                "Stopped " + stoppedCount + " backend server(s).",
+                "Backend Servers Stopped", JOptionPane.INFORMATION_MESSAGE);
+        }
     }
     
     /**

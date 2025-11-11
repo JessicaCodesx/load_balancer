@@ -8,6 +8,8 @@ import java.net.*;
 public class TestBackendServer {
     private int port;
     private String serverName;
+    private volatile boolean running;
+    private ServerSocket serverSocket;
     
     /**
      * constructor for the test backend server
@@ -17,31 +19,65 @@ public class TestBackendServer {
     public TestBackendServer(int port, String serverName) {
         this.port = port;
         this.serverName = serverName;
+        this.running = false;
     }
     
     /**
      * starts the backend server
      */
     public void start() {
+        running = true;
         System.out.println(serverName + " starting on port " + port);
         
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
+        try {
+            serverSocket = new ServerSocket(port);
             System.out.println(serverName + " listening on port " + port);
             System.out.println("ready to accept connections from load balancer");
             
-            // keep accepting connections
-            while (true) {
-                // wait for a connection from the load balancer
-                Socket clientSocket = serverSocket.accept();
-                System.out.println(serverName + " received connection from: " + clientSocket.getRemoteSocketAddress());
-                
-                // handle each connection in a separate thread
-                new Thread(() -> handleClient(clientSocket)).start();
+            // keep accepting connections while running
+            while (running) {
+                try {
+                    // wait for a connection from the load balancer
+                    Socket clientSocket = serverSocket.accept();
+                    System.out.println(serverName + " received connection from: " + clientSocket.getRemoteSocketAddress());
+                    
+                    // handle each connection in a separate thread
+                    new Thread(() -> handleClient(clientSocket)).start();
+                } catch (IOException e) {
+                    if (running) {
+                        System.err.println("error accepting connection in " + serverName + ": " + e.getMessage());
+                    }
+                }
             }
         } catch (IOException e) {
             System.err.println("error in " + serverName + ": " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            stop();
         }
+    }
+    
+    /**
+     * stops the backend server
+     */
+    public void stop() {
+        running = false;
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            try {
+                serverSocket.close();
+                System.out.println(serverName + " stopped");
+            } catch (IOException e) {
+                System.err.println("error closing server socket: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * checks if the server is running
+     * @return true if running, false otherwise
+     */
+    public boolean isRunning() {
+        return running;
     }
     
     /**
