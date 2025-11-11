@@ -311,10 +311,13 @@ public class LoadBalancerGUI extends JFrame {
                 
                 // show warning if some servers failed
                 if (failedCount > 0) {
+                    final int finalAddedCount = addedCount;
+                    final int finalFailedCount = failedCount;
+                    final String finalErrorMessages = errorMessages.toString();
                     SwingUtilities.invokeLater(() -> {
                         JOptionPane.showMessageDialog(this,
-                            "Added " + addedCount + " backend server(s).\n\n" +
-                            failedCount + " server(s) failed to add:\n" + errorMessages.toString(),
+                            "Added " + finalAddedCount + " backend server(s).\n\n" +
+                            finalFailedCount + " server(s) failed to add:\n" + finalErrorMessages,
                             "Partial Success", JOptionPane.WARNING_MESSAGE);
                     });
                 }
