@@ -191,18 +191,19 @@ public class LoadBalancerGUI extends JFrame {
                 
                 // add backend servers
                 for (String line : backendLines) {
-                    line = line.trim();
-                    if (!line.isEmpty()) {
-                        String[] parts = line.split(":");
+                    final String trimmedLine = line.trim();
+                    if (!trimmedLine.isEmpty()) {
+                        String[] parts = trimmedLine.split(":");
                         if (parts.length == 2) {
                             try {
                                 String host = parts[0];
                                 int backendPort = Integer.parseInt(parts[1]);
                                 loadBalancer.addBackendServer(host, backendPort);
                             } catch (NumberFormatException e) {
+                                final String errorLine = trimmedLine;
                                 SwingUtilities.invokeLater(() -> {
                                     JOptionPane.showMessageDialog(this, 
-                                        "Invalid backend server format: " + line + "\nExpected: host:port",
+                                        "Invalid backend server format: " + errorLine + "\nExpected: host:port",
                                         "Configuration Error", JOptionPane.ERROR_MESSAGE);
                                 });
                             }
