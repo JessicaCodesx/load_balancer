@@ -72,7 +72,7 @@ public class LoadBalancerGUI extends JFrame {
         updateUIState(false);
         
         // start update timer to refresh stats every second
-        Timer updateTimer = new Timer(1000, e -> updateDisplay());
+        javax.swing.Timer updateTimer = new javax.swing.Timer(1000, e -> updateDisplay());
         updateTimer.start();
         
         pack();
