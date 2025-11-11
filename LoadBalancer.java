@@ -12,6 +12,7 @@ public class LoadBalancer {
     private LoadBalancingAlgorithm algorithm;
     private HealthChecker healthChecker;
     private Thread healthCheckerThread;
+    private LoadBalancerStats stats;
     
     /**
      * constructor to initialize the load balancer
@@ -22,6 +23,7 @@ public class LoadBalancer {
         this.backendServers = new ArrayList<>();
         // default to round-robin algorithm
         this.algorithm = new RoundRobinAlgorithm();
+        this.stats = new LoadBalancerStats();
     }
     
     /**
@@ -119,6 +121,20 @@ public class LoadBalancer {
         healthCheckerThread.setDaemon(true); // dies when main thread dies
         healthCheckerThread.start();
         
+        // start stats printer thread - prints stats every 30 seconds
+        Thread statsThread = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(30000); // 30 seconds
+                    stats.printStats(backendServers);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        });
+        statsThread.setDaemon(true);
+        statsThread.start();
+        
         try (ServerSocket serverSocket = new ServerSocket(loadBalancerPort)) {
             System.out.println("load balancer listening on port " + loadBalancerPort);
             
@@ -165,6 +181,10 @@ public class LoadBalancer {
         BackendServer backend = null;
         Socket backendSocket = null;
         int maxRetries = 3; // try up to 3 different servers
+        boolean requestSuccessful = false;
+        
+        // track that we received a request
+        stats.incrementTotalRequests();
         
         try {
             // try to connect to a backend server, with retries if it fails
@@ -174,6 +194,7 @@ public class LoadBalancer {
                 
                 if (healthyServers.isEmpty()) {
                     System.err.println("no healthy backend servers available");
+                    stats.incrementFailedRequests();
                     clientSocket.close();
                     return;
                 }
@@ -215,6 +236,7 @@ public class LoadBalancer {
                     } else {
                         // out of retries
                         System.err.println("failed to connect to any backend server after " + maxRetries + " attempts");
+                        stats.incrementFailedRequests();
                         clientSocket.close();
                         return;
                     }
@@ -224,9 +246,13 @@ public class LoadBalancer {
             // if we got here, we have a successful connection
             if (backendSocket == null || backend == null) {
                 System.err.println("failed to establish backend connection");
+                stats.incrementFailedRequests();
                 clientSocket.close();
                 return;
             }
+            
+            // track successful connection
+            stats.incrementTotalConnections();
             
             // forward data between client and backend in both directions
             // this runs in separate threads so both directions work simultaneously
@@ -257,11 +283,19 @@ public class LoadBalancer {
             clientSocket.close();
             backendSocket.close();
             
+            // mark request as successful since we completed the connection
+            requestSuccessful = true;
+            stats.incrementSuccessfulRequests();
+            
             System.out.println("client connection closed");
             
         } catch (Exception e) {
             System.err.println("error handling client: " + e.getMessage());
             e.printStackTrace();
+            // if we didn't already mark it as failed, mark it now
+            if (!requestSuccessful) {
+                stats.incrementFailedRequests();
+            }
             try {
                 if (clientSocket != null) {
                     clientSocket.close();
