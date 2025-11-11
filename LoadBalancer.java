@@ -97,9 +97,12 @@ public class LoadBalancer {
      * @param clientSocket the socket connected to the client
      */
     private void handleClient(Socket clientSocket) {
+        BackendServer backend = null;
+        Socket backendSocket = null;
+        
         try {
             // select which backend server to use based on the algorithm
-            BackendServer backend = algorithm.selectServer(backendServers);
+            backend = algorithm.selectServer(backendServers);
             
             if (backend == null) {
                 System.err.println("no backend servers available");
@@ -107,10 +110,15 @@ public class LoadBalancer {
                 return;
             }
             
-            System.out.println("forwarding client to backend: " + backend);
+            // increment connection count for this backend server
+            // this is important for least connections algorithm
+            backend.incrementConnections();
+            
+            System.out.println("forwarding client to backend: " + backend + 
+                             " (connections: " + backend.getActiveConnections() + ")");
             
             // connect to the selected backend server
-            Socket backendSocket = new Socket(backend.getHost(), backend.getPort());
+            backendSocket = new Socket(backend.getHost(), backend.getPort());
             
             // forward data between client and backend in both directions
             // this runs in separate threads so both directions work simultaneously
@@ -147,9 +155,20 @@ public class LoadBalancer {
             System.err.println("error handling client: " + e.getMessage());
             e.printStackTrace();
             try {
-                clientSocket.close();
+                if (clientSocket != null) {
+                    clientSocket.close();
+                }
+                if (backendSocket != null) {
+                    backendSocket.close();
+                }
             } catch (IOException ioException) {
                 // ignore
+            }
+        } finally {
+            // always decrement connection count when done
+            // this ensures proper tracking even if errors occur
+            if (backend != null) {
+                backend.decrementConnections();
             }
         }
     }
