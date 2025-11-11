@@ -30,6 +30,30 @@ javac *.java
 This will create `.class` files for all components.
 
 ### Running the Load Balancer
+
+You can run the load balancer in two ways:
+1. **Graphical User Interface (GUI)** - Recommended for easy monitoring
+2. **Command Line Interface** - Traditional terminal-based interface
+
+#### Running with GUI (Recommended)
+
+Launch the graphical interface:
+
+```
+java LoadBalancerGUI
+```
+
+The GUI provides:
+- Real-time statistics display (updates every second)
+- Backend server status monitoring with health indicators
+- Easy configuration panel (port, algorithm, backend servers)
+- Start/stop controls
+- Visual feedback for all operations
+
+Simply configure your settings in the GUI, click "Start Load Balancer", and monitor the statistics in real-time!
+
+#### Running from Command Line
+
 #### Basic Usage
 
 Run with default settings (port 8080, round-robin algorithm, default backend servers):
@@ -145,6 +169,7 @@ load_balancer/
 ├── LeastConnectionsAlgorithm.java # Least connections implementation
 ├── HealthChecker.java              # Health checking for backend servers
 ├── LoadBalancerStats.java          # Statistics tracking
+├── LoadBalancerGUI.java            # Swing GUI for load balancer
 ├── TestBackendServer.java          # Test backend server for demonstration
 ├── TestClient.java                 # Test client for demonstration
 └── README.md                       # This file
@@ -201,6 +226,14 @@ Simple test client that:
 - Sends messages and receives responses
 - Supports interactive mode or single message mode
 - Helps verify load balancing distribution
+
+#### LoadBalancerGUI.java
+Swing-based graphical user interface that:
+- Provides real-time statistics monitoring
+- Displays backend server health and connection status
+- Allows easy configuration of port, algorithm, and backend servers
+- Updates automatically every second
+- Makes it easy to demonstrate and monitor the load balancer
 
 ### Key Networking Concepts Demonstrated
 

@@ -354,6 +354,22 @@ public class LoadBalancer {
     }
     
     /**
+     * gets the statistics object for monitoring
+     * @return the LoadBalancerStats object
+     */
+    public LoadBalancerStats getStats() {
+        return stats;
+    }
+    
+    /**
+     * gets the list of backend servers
+     * @return list of backend servers
+     */
+    public List<BackendServer> getBackendServers() {
+        return backendServers;
+    }
+    
+    /**
      * sets the load balancing algorithm
      * @param algorithm the algorithm to use
      */
