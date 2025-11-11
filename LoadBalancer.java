@@ -10,6 +10,8 @@ public class LoadBalancer {
     private int loadBalancerPort;
     private List<BackendServer> backendServers;
     private LoadBalancingAlgorithm algorithm;
+    private HealthChecker healthChecker;
+    private Thread healthCheckerThread;
     
     /**
      * constructor to initialize the load balancer
@@ -110,6 +112,13 @@ public class LoadBalancer {
     public void start() {
         System.out.println("load balancer starting on port " + loadBalancerPort);
         
+        // start health checker in background
+        // checks every 10 seconds with 2 second connection timeout
+        healthChecker = new HealthChecker(backendServers, 10, 2000);
+        healthCheckerThread = new Thread(healthChecker);
+        healthCheckerThread.setDaemon(true); // dies when main thread dies
+        healthCheckerThread.start();
+        
         try (ServerSocket serverSocket = new ServerSocket(loadBalancerPort)) {
             System.out.println("load balancer listening on port " + loadBalancerPort);
             
@@ -125,7 +134,26 @@ public class LoadBalancer {
         } catch (IOException e) {
             System.err.println("error starting load balancer: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            // stop health checker when load balancer stops
+            if (healthChecker != null) {
+                healthChecker.stop();
+            }
         }
+    }
+    
+    /**
+     * gets a list of only the healthy backend servers
+     * @return list of healthy servers
+     */
+    private List<BackendServer> getHealthyServers() {
+        List<BackendServer> healthyServers = new ArrayList<>();
+        for (BackendServer server : backendServers) {
+            if (server.isHealthy()) {
+                healthyServers.add(server);
+            }
+        }
+        return healthyServers;
     }
     
     /**
@@ -137,11 +165,12 @@ public class LoadBalancer {
         Socket backendSocket = null;
         
         try {
-            // select which backend server to use based on the algorithm
-            backend = algorithm.selectServer(backendServers);
+            // get only healthy servers and select one based on the algorithm
+            List<BackendServer> healthyServers = getHealthyServers();
+            backend = algorithm.selectServer(healthyServers);
             
             if (backend == null) {
-                System.err.println("no backend servers available");
+                System.err.println("no healthy backend servers available");
                 clientSocket.close();
                 return;
             }

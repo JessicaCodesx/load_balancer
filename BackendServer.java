@@ -5,6 +5,8 @@ public class BackendServer {
     private String host;
     private int port;
     private int activeConnections;
+    private boolean isHealthy;
+    private long lastHealthCheckTime;
     
     /**
      * constructor for a backend server
@@ -15,6 +17,8 @@ public class BackendServer {
         this.host = host;
         this.port = port;
         this.activeConnections = 0;
+        this.isHealthy = true; // assume healthy initially
+        this.lastHealthCheckTime = 0;
     }
     
     public String getHost() {
@@ -45,9 +49,26 @@ public class BackendServer {
         }
     }
     
+    public boolean isHealthy() {
+        return isHealthy;
+    }
+    
+    public void setHealthy(boolean healthy) {
+        this.isHealthy = healthy;
+    }
+    
+    public long getLastHealthCheckTime() {
+        return lastHealthCheckTime;
+    }
+    
+    public void setLastHealthCheckTime(long time) {
+        this.lastHealthCheckTime = time;
+    }
+    
     @Override
     public String toString() {
-        return host + ":" + port;
+        String status = isHealthy ? "healthy" : "unhealthy";
+        return host + ":" + port + " (" + status + ")";
     }
 }
 
