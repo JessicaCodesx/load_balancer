@@ -414,13 +414,13 @@ public class LoadBalancerGUI extends JFrame {
         // create load balancer in a separate thread
         loadBalancerThread = new Thread(() -> {
                 // create load balancer
-                loadBalancer = new LoadBalancer(port);
+                LoadBalancer newLB = new LoadBalancer(port);
                 
                 // set algorithm
                 if ("least-connections".equals(algorithm)) {
-                    loadBalancer.setAlgorithm(new LeastConnectionsAlgorithm());
+                    newLB.setAlgorithm(new LeastConnectionsAlgorithm());
                 } else {
-                    loadBalancer.setAlgorithm(new RoundRobinAlgorithm());
+                    newLB.setAlgorithm(new RoundRobinAlgorithm());
                 }
                 
                 // add backend servers
@@ -436,7 +436,7 @@ public class LoadBalancerGUI extends JFrame {
                             try {
                                 String host = parts[0];
                                 int backendPort = Integer.parseInt(parts[1]);
-                                loadBalancer.addBackendServer(host, backendPort);
+                                newLB.addBackendServer(host, backendPort);
                                 addedCount++;
                             } catch (NumberFormatException e) {
                                 failedCount++;
@@ -481,8 +481,11 @@ public class LoadBalancerGUI extends JFrame {
                     });
                 }
                 
+                // assign to volatile field before starting (so GUI can access it)
+                loadBalancer = newLB;
+                
                 // start the load balancer
-                loadBalancer.start();
+                newLB.start();
             });
             
             loadBalancerThread.setDaemon(true);
@@ -673,37 +676,46 @@ public class LoadBalancerGUI extends JFrame {
      * updates the display with current statistics
      */
     private void updateDisplay() {
-        if (loadBalancer != null && loadBalancer.getStats() != null) {
-            LoadBalancerStats stats = loadBalancer.getStats();
-            List<BackendServer> servers = loadBalancer.getBackendServers();
-            
-            // update statistics labels
-            totalRequestsLabel.setText("Total Requests: " + stats.getTotalRequests());
-            successfulRequestsLabel.setText("Successful: " + stats.getSuccessfulRequests());
-            failedRequestsLabel.setText("Failed: " + stats.getFailedRequests());
-            totalConnectionsLabel.setText("Total Connections: " + stats.getTotalConnections());
-            
-            // calculate and display success rate
-            if (stats.getTotalRequests() > 0) {
-                double successRate = (double) stats.getSuccessfulRequests() / stats.getTotalRequests() * 100;
-                successRateLabel.setText(String.format("Success Rate: %.2f%%", successRate));
-            } else {
-                successRateLabel.setText("Success Rate: 0.00%");
-            }
-            
-            // update server status
-            StringBuilder statusText = new StringBuilder();
-            if (servers != null && !servers.isEmpty()) {
-                for (BackendServer server : servers) {
-                    String healthStatus = server.isHealthy() ? "✓ Healthy" : "✗ Unhealthy";
-                    Color statusColor = server.isHealthy() ? Color.GREEN : Color.RED;
-                    statusText.append(String.format("%s:%d - %s (Connections: %d)\n",
-                        server.getHost(), server.getPort(), healthStatus, server.getActiveConnections()));
+        // get a local reference to avoid issues with volatile access
+        LoadBalancer currentLB = loadBalancer;
+        
+        if (currentLB != null) {
+            try {
+                LoadBalancerStats stats = currentLB.getStats();
+                List<BackendServer> servers = currentLB.getBackendServers();
+                
+                if (stats != null) {
+                    // update statistics labels
+                    totalRequestsLabel.setText("Total Requests: " + stats.getTotalRequests());
+                    successfulRequestsLabel.setText("Successful: " + stats.getSuccessfulRequests());
+                    failedRequestsLabel.setText("Failed: " + stats.getFailedRequests());
+                    totalConnectionsLabel.setText("Total Connections: " + stats.getTotalConnections());
+                    
+                    // calculate and display success rate
+                    if (stats.getTotalRequests() > 0) {
+                        double successRate = (double) stats.getSuccessfulRequests() / stats.getTotalRequests() * 100;
+                        successRateLabel.setText(String.format("Success Rate: %.2f%%", successRate));
+                    } else {
+                        successRateLabel.setText("Success Rate: 0.00%");
+                    }
                 }
-            } else {
-                statusText.append("No backend servers configured");
+                
+                // update server status
+                if (servers != null && !servers.isEmpty()) {
+                    StringBuilder statusText = new StringBuilder();
+                    for (BackendServer server : servers) {
+                        String healthStatus = server.isHealthy() ? "Healthy" : "Unhealthy";
+                        statusText.append(String.format("%s:%d - %s (Connections: %d)\n",
+                            server.getHost(), server.getPort(), healthStatus, server.getActiveConnections()));
+                    }
+                    serverStatusArea.setText(statusText.toString());
+                } else {
+                    serverStatusArea.setText("No backend servers configured");
+                }
+            } catch (Exception e) {
+                // silently handle any errors during update
+                // this prevents GUI from breaking if load balancer is in transition
             }
-            serverStatusArea.setText(statusText.toString());
         } else {
             // reset display when not running
             totalRequestsLabel.setText("Total Requests: 0");
