@@ -493,11 +493,17 @@ public class LoadBalancerGUI extends JFrame {
             
             try {
                 // wait a moment for initialization and check if load balancer was created
-                Thread.sleep(500);
+                // wait a bit longer to ensure load balancer is fully set up
+                for (int i = 0; i < 10; i++) {
+                    Thread.sleep(100);
+                    if (loadBalancer != null) {
+                        break;
+                    }
+                }
                 
                 // check if load balancer was created successfully
                 LoadBalancer currentLB = loadBalancer;
-                if (currentLB != null) {
+                if (currentLB != null && currentLB.getStats() != null) {
                     updateUIState(true);
                     statusLabel.setText("Status: Running on port " + port);
                     statusLabel.setForeground(new Color(76, 175, 80));
@@ -507,7 +513,8 @@ public class LoadBalancerGUI extends JFrame {
                         "Load balancer started successfully!\n\n" +
                         "Port: " + port + "\n" +
                         "Algorithm: " + algorithm + "\n" +
-                        "Backend servers configured",
+                        "Backend servers configured\n\n" +
+                        "Note: Stats will update when clients connect.",
                         "Load Balancer Started", JOptionPane.INFORMATION_MESSAGE);
                 } else {
                     updateUIState(false);
@@ -685,19 +692,28 @@ public class LoadBalancerGUI extends JFrame {
                 List<BackendServer> servers = currentLB.getBackendServers();
                 
                 if (stats != null) {
-                    // update statistics labels
-                    totalRequestsLabel.setText("Total Requests: " + stats.getTotalRequests());
-                    successfulRequestsLabel.setText("Successful: " + stats.getSuccessfulRequests());
-                    failedRequestsLabel.setText("Failed: " + stats.getFailedRequests());
-                    totalConnectionsLabel.setText("Total Connections: " + stats.getTotalConnections());
+                    // read all stats values first (on timer thread, which is EDT)
+                    long totalReqs = stats.getTotalRequests();
+                    long successfulReqs = stats.getSuccessfulRequests();
+                    long failedReqs = stats.getFailedRequests();
+                    long totalConns = stats.getTotalConnections();
+                    
+                    // update statistics labels directly (we're already on EDT)
+                    totalRequestsLabel.setText("Total Requests: " + totalReqs);
+                    successfulRequestsLabel.setText("Successful: " + successfulReqs);
+                    failedRequestsLabel.setText("Failed: " + failedReqs);
+                    totalConnectionsLabel.setText("Total Connections: " + totalConns);
                     
                     // calculate and display success rate
-                    if (stats.getTotalRequests() > 0) {
-                        double successRate = (double) stats.getSuccessfulRequests() / stats.getTotalRequests() * 100;
+                    if (totalReqs > 0) {
+                        double successRate = (double) successfulReqs / totalReqs * 100;
                         successRateLabel.setText(String.format("Success Rate: %.2f%%", successRate));
                     } else {
                         successRateLabel.setText("Success Rate: 0.00%");
                     }
+                } else {
+                    // stats is null - show debug info
+                    serverStatusArea.setText("Stats object is null");
                 }
                 
                 // update server status
@@ -713,8 +729,10 @@ public class LoadBalancerGUI extends JFrame {
                     serverStatusArea.setText("No backend servers configured");
                 }
             } catch (Exception e) {
-                // silently handle any errors during update
-                // this prevents GUI from breaking if load balancer is in transition
+                // log error for debugging
+                System.err.println("Error updating display: " + e.getMessage());
+                e.printStackTrace();
+                serverStatusArea.setText("Error: " + e.getMessage());
             }
         } else {
             // reset display when not running

@@ -211,6 +211,8 @@ public class LoadBalancer {
                     // increment connection count for this backend server
                     // this is important for least connections algorithm
                     backend.incrementConnections();
+                    // track that this server is handling a request
+                    backend.incrementRequestsHandled();
                     
                     System.out.println("forwarding client to backend: " + backend + 
                                      " (connections: " + backend.getActiveConnections() + ")");
@@ -228,6 +230,7 @@ public class LoadBalancer {
                     System.err.println("failed to connect to " + backend + ": " + e.getMessage());
                     backend.setHealthy(false);
                     backend.decrementConnections(); // undo the increment since we failed
+                    backend.incrementFailedRequests(); // track failed request for this server
                     
                     if (attempt < maxRetries - 1) {
                         System.out.println("retrying with another backend server (attempt " + (attempt + 2) + "/" + maxRetries + ")");
@@ -290,6 +293,9 @@ public class LoadBalancer {
             // mark request as successful since we completed the connection
             requestSuccessful = true;
             stats.incrementSuccessfulRequests();
+            if (backend != null) {
+                backend.incrementSuccessfulRequests();
+            }
             
             System.out.println("client connection closed");
             
