@@ -33,6 +33,38 @@ public class LoadBalancer {
         }
         
         LoadBalancer lb = new LoadBalancer(port);
+        
+        // add backend servers
+        // format: host:port pairs as arguments, or use defaults
+        if (args.length > 1) {
+            // parse backend servers from command line arguments
+            // example: java LoadBalancer 8080 localhost:9001 localhost:9002 localhost:9003
+            for (int i = 1; i < args.length; i++) {
+                String[] parts = args[i].split(":");
+                if (parts.length == 2) {
+                    String host = parts[0];
+                    int backendPort = Integer.parseInt(parts[1]);
+                    lb.addBackendServer(host, backendPort);
+                } else {
+                    System.err.println("invalid backend server format: " + args[i] + " (expected host:port)");
+                }
+            }
+        } else {
+            // use default backend servers for testing
+            // these are just examples - in production you'd configure these properly
+            System.out.println("no backend servers specified, using defaults");
+            lb.addBackendServer("localhost", 9001);
+            lb.addBackendServer("localhost", 9002);
+            lb.addBackendServer("localhost", 9003);
+        }
+        
+        // check if we have any backend servers
+        if (!lb.hasBackendServers()) {
+            System.err.println("error: no backend servers configured!");
+            System.err.println("usage: java LoadBalancer [port] [backend1:port] [backend2:port] ...");
+            System.exit(1);
+        }
+        
         lb.start();
     }
     
@@ -150,6 +182,14 @@ public class LoadBalancer {
     public void addBackendServer(String host, int port) {
         backendServers.add(new BackendServer(host, port));
         System.out.println("added backend server: " + host + ":" + port);
+    }
+    
+    /**
+     * checks if there are any backend servers configured
+     * @return true if there are backend servers, false otherwise
+     */
+    public boolean hasBackendServers() {
+        return !backendServers.isEmpty();
     }
     
     /**
