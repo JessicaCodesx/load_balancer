@@ -254,11 +254,15 @@ public class LoadBalancer {
             // track successful connection
             stats.incrementTotalConnections();
             
+            // create final references for use in lambda expressions
+            final Socket finalBackendSocket = backendSocket;
+            final Socket finalClientSocket = clientSocket;
+            
             // forward data between client and backend in both directions
             // this runs in separate threads so both directions work simultaneously
             Thread clientToBackend = new Thread(() -> {
                 try {
-                    forwardData(clientSocket.getInputStream(), backendSocket.getOutputStream());
+                    forwardData(finalClientSocket.getInputStream(), finalBackendSocket.getOutputStream());
                 } catch (IOException e) {
                     // connection closed, that's ok
                 }
@@ -266,7 +270,7 @@ public class LoadBalancer {
             
             Thread backendToClient = new Thread(() -> {
                 try {
-                    forwardData(backendSocket.getInputStream(), clientSocket.getOutputStream());
+                    forwardData(finalBackendSocket.getInputStream(), finalClientSocket.getOutputStream());
                 } catch (IOException e) {
                     // connection closed, that's ok
                 }
