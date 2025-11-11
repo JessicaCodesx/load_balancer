@@ -158,32 +158,75 @@ public class LoadBalancer {
     
     /**
      * handles a client connection by forwarding it to a backend server
+     * includes retry logic if connection to backend fails
      * @param clientSocket the socket connected to the client
      */
     private void handleClient(Socket clientSocket) {
         BackendServer backend = null;
         Socket backendSocket = null;
+        int maxRetries = 3; // try up to 3 different servers
         
         try {
-            // get only healthy servers and select one based on the algorithm
-            List<BackendServer> healthyServers = getHealthyServers();
-            backend = algorithm.selectServer(healthyServers);
+            // try to connect to a backend server, with retries if it fails
+            for (int attempt = 0; attempt < maxRetries; attempt++) {
+                // get only healthy servers and select one based on the algorithm
+                List<BackendServer> healthyServers = getHealthyServers();
+                
+                if (healthyServers.isEmpty()) {
+                    System.err.println("no healthy backend servers available");
+                    clientSocket.close();
+                    return;
+                }
+                
+                backend = algorithm.selectServer(healthyServers);
+                
+                if (backend == null) {
+                    System.err.println("failed to select a backend server");
+                    clientSocket.close();
+                    return;
+                }
+                
+                try {
+                    // increment connection count for this backend server
+                    // this is important for least connections algorithm
+                    backend.incrementConnections();
+                    
+                    System.out.println("forwarding client to backend: " + backend + 
+                                     " (connections: " + backend.getActiveConnections() + ")");
+                    
+                    // try to connect to the selected backend server
+                    // set a timeout so we don't hang forever
+                    backendSocket = new Socket();
+                    backendSocket.connect(new java.net.InetSocketAddress(backend.getHost(), backend.getPort()), 5000);
+                    
+                    // connection successful, break out of retry loop
+                    break;
+                    
+                } catch (IOException e) {
+                    // connection failed, mark server as unhealthy and try another
+                    System.err.println("failed to connect to " + backend + ": " + e.getMessage());
+                    backend.setHealthy(false);
+                    backend.decrementConnections(); // undo the increment since we failed
+                    
+                    if (attempt < maxRetries - 1) {
+                        System.out.println("retrying with another backend server (attempt " + (attempt + 2) + "/" + maxRetries + ")");
+                        backend = null;
+                        backendSocket = null;
+                    } else {
+                        // out of retries
+                        System.err.println("failed to connect to any backend server after " + maxRetries + " attempts");
+                        clientSocket.close();
+                        return;
+                    }
+                }
+            }
             
-            if (backend == null) {
-                System.err.println("no healthy backend servers available");
+            // if we got here, we have a successful connection
+            if (backendSocket == null || backend == null) {
+                System.err.println("failed to establish backend connection");
                 clientSocket.close();
                 return;
             }
-            
-            // increment connection count for this backend server
-            // this is important for least connections algorithm
-            backend.incrementConnections();
-            
-            System.out.println("forwarding client to backend: " + backend + 
-                             " (connections: " + backend.getActiveConnections() + ")");
-            
-            // connect to the selected backend server
-            backendSocket = new Socket(backend.getHost(), backend.getPort());
             
             // forward data between client and backend in both directions
             // this runs in separate threads so both directions work simultaneously
