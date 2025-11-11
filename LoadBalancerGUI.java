@@ -46,7 +46,9 @@ public class LoadBalancerGUI extends JFrame {
     public LoadBalancerGUI() {
         setTitle("Load Balancer - COSC4436");
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setLayout(new BorderLayout());
+        
+        // set a nice background color
+        getContentPane().setBackground(new Color(245, 245, 250));
         
         // add window listener to clean up on close
         addWindowListener(new java.awt.event.WindowAdapter() {
@@ -62,11 +64,8 @@ public class LoadBalancerGUI extends JFrame {
         backendServers = new HashMap<>();
         backendServerThreads = new HashMap<>();
         
-        // create main panels
-        createConfigPanel();
-        createStatsPanel();
-        createServerStatusPanel();
-        createControlPanel();
+        // create main panels with better layout
+        createMainLayout();
         
         // set initial state
         updateUIState(false);
@@ -76,64 +75,139 @@ public class LoadBalancerGUI extends JFrame {
         updateTimer.start();
         
         pack();
-        setSize(800, 600);
+        setSize(1000, 700);
         setLocationRelativeTo(null);
+        setResizable(true);
+    }
+    
+    /**
+     * creates the main layout with better organization
+     */
+    private void createMainLayout() {
+        setLayout(new BorderLayout(10, 10));
+        ((BorderLayout) getLayout()).setHgap(10);
+        ((BorderLayout) getLayout()).setVgap(10);
+        
+        // top panel: configuration
+        JPanel topPanel = createConfigPanel();
+        add(topPanel, BorderLayout.NORTH);
+        
+        // center: split between stats and server status
+        JSplitPane centerSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        centerSplit.setDividerLocation(500);
+        centerSplit.setResizeWeight(0.5);
+        centerSplit.setBorder(BorderFactory.createEmptyBorder());
+        
+        JPanel statsPanel = createStatsPanel();
+        JPanel serverStatusPanel = createServerStatusPanel();
+        
+        centerSplit.setLeftComponent(statsPanel);
+        centerSplit.setRightComponent(serverStatusPanel);
+        add(centerSplit, BorderLayout.CENTER);
+        
+        // bottom: control panel
+        JPanel controlPanel = createControlPanel();
+        add(controlPanel, BorderLayout.SOUTH);
     }
     
     /**
      * creates the configuration panel
      */
-    private void createConfigPanel() {
+    private JPanel createConfigPanel() {
         JPanel configPanel = new JPanel();
-        configPanel.setBorder(new TitledBorder("Configuration"));
+        configPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(100, 149, 237), 2),
+                "Configuration",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font(Font.SANS_SERIF, Font.BOLD, 12),
+                new Color(70, 70, 70)
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        configPanel.setBackground(Color.WHITE);
         configPanel.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(8, 8, 8, 8);
         gbc.anchor = GridBagConstraints.WEST;
         
         // port field
         gbc.gridx = 0; gbc.gridy = 0;
-        configPanel.add(new JLabel("Port:"), gbc);
+        JLabel portLabel = new JLabel("Port:");
+        portLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        configPanel.add(portLabel, gbc);
         gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 0.3;
         portField = new JTextField("8080", 10);
+        portField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         configPanel.add(portField, gbc);
         
         // algorithm selection
-        gbc.gridx = 0; gbc.gridy = 1;
-        configPanel.add(new JLabel("Algorithm:"), gbc);
-        gbc.gridx = 1;
+        gbc.gridx = 2; gbc.gridy = 0;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        JLabel algoLabel = new JLabel("Algorithm:");
+        algoLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        configPanel.add(algoLabel, gbc);
+        gbc.gridx = 3;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 0.3;
         algorithmCombo = new JComboBox<>(new String[]{"round-robin", "least-connections"});
+        algorithmCombo.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         configPanel.add(algorithmCombo, gbc);
         
         // backend servers
-        gbc.gridx = 0; gbc.gridy = 2;
+        gbc.gridx = 0; gbc.gridy = 1;
+        gbc.gridwidth = 4;
         gbc.anchor = GridBagConstraints.NORTHWEST;
-        configPanel.add(new JLabel("Backend Servers:"), gbc);
-        gbc.gridx = 1;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weightx = 1.0;
         gbc.weighty = 1.0;
-        backendServersArea = new JTextArea("localhost:9001\nlocalhost:9002\nlocalhost:9003", 3, 20);
+        JLabel serversLabel = new JLabel("Backend Servers (one per line, format: host:port):");
+        serversLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        configPanel.add(serversLabel, gbc);
+        gbc.gridy = 2;
+        backendServersArea = new JTextArea("localhost:9001\nlocalhost:9002\nlocalhost:9003", 3, 30);
+        backendServersArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
         backendServersArea.setLineWrap(true);
+        backendServersArea.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)
+        ));
         JScrollPane scrollPane = new JScrollPane(backendServersArea);
+        scrollPane.setPreferredSize(new Dimension(0, 80));
         configPanel.add(scrollPane, gbc);
         
-        add(configPanel, BorderLayout.NORTH);
+        return configPanel;
     }
     
     /**
      * creates the statistics display panel
      */
-    private void createStatsPanel() {
+    private JPanel createStatsPanel() {
         JPanel statsPanel = new JPanel();
-        statsPanel.setBorder(new TitledBorder("Statistics"));
-        statsPanel.setLayout(new GridLayout(3, 2, 10, 10));
+        statsPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(100, 149, 237), 2),
+                "Statistics",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font(Font.SANS_SERIF, Font.BOLD, 12),
+                new Color(70, 70, 70)
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        statsPanel.setBackground(Color.WHITE);
+        statsPanel.setLayout(new GridLayout(5, 1, 10, 12));
         
-        totalRequestsLabel = new JLabel("Total Requests: 0");
-        successfulRequestsLabel = new JLabel("Successful: 0");
-        failedRequestsLabel = new JLabel("Failed: 0");
-        successRateLabel = new JLabel("Success Rate: 0.00%");
-        totalConnectionsLabel = new JLabel("Total Connections: 0");
+        // create styled labels
+        totalRequestsLabel = createStatLabel("Total Requests: 0");
+        successfulRequestsLabel = createStatLabel("Successful: 0");
+        failedRequestsLabel = createStatLabel("Failed: 0");
+        successRateLabel = createStatLabel("Success Rate: 0.00%");
+        totalConnectionsLabel = createStatLabel("Total Connections: 0");
         
         statsPanel.add(totalRequestsLabel);
         statsPanel.add(successfulRequestsLabel);
@@ -141,66 +215,151 @@ public class LoadBalancerGUI extends JFrame {
         statsPanel.add(successRateLabel);
         statsPanel.add(totalConnectionsLabel);
         
-        add(statsPanel, BorderLayout.CENTER);
+        return statsPanel;
+    }
+    
+    /**
+     * creates a styled statistics label
+     */
+    private JLabel createStatLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        label.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(230, 230, 230)),
+            BorderFactory.createEmptyBorder(10, 15, 10, 15)
+        ));
+        label.setOpaque(true);
+        label.setBackground(new Color(248, 248, 255));
+        return label;
     }
     
     /**
      * creates the server status panel
      */
-    private void createServerStatusPanel() {
+    private JPanel createServerStatusPanel() {
         JPanel statusPanel = new JPanel();
-        statusPanel.setBorder(new TitledBorder("Backend Server Status"));
+        statusPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(100, 149, 237), 2),
+                "Backend Server Status",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font(Font.SANS_SERIF, Font.BOLD, 12),
+                new Color(70, 70, 70)
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        statusPanel.setBackground(Color.WHITE);
         statusPanel.setLayout(new BorderLayout());
         
         serverStatusArea = new JTextArea(8, 30);
         serverStatusArea.setEditable(false);
-        serverStatusArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        serverStatusArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
+        serverStatusArea.setBackground(new Color(248, 248, 255));
+        serverStatusArea.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            BorderFactory.createEmptyBorder(8, 8, 8, 8)
+        ));
         JScrollPane scrollPane = new JScrollPane(serverStatusArea);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
         statusPanel.add(scrollPane, BorderLayout.CENTER);
         
-        add(statusPanel, BorderLayout.EAST);
+        return statusPanel;
     }
     
     /**
      * creates the control panel with start/stop buttons
      */
-    private void createControlPanel() {
+    private JPanel createControlPanel() {
         JPanel controlPanel = new JPanel();
-        controlPanel.setLayout(new BorderLayout());
+        controlPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            BorderFactory.createEmptyBorder(10, 15, 10, 15)
+        ));
+        controlPanel.setBackground(new Color(250, 250, 255));
+        controlPanel.setLayout(new BorderLayout(15, 0));
         
-        // status label
+        // status label with icon
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        statusPanel.setBackground(new Color(250, 250, 255));
         statusLabel = new JLabel("Status: Stopped");
         statusLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        controlPanel.add(statusLabel, BorderLayout.WEST);
+        statusLabel.setForeground(new Color(120, 120, 120));
+        statusPanel.add(statusLabel);
+        controlPanel.add(statusPanel, BorderLayout.WEST);
         
-        // buttons
+        // buttons panel
         JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new FlowLayout());
-        
-        // load balancer buttons
-        startButton = new JButton("Start Load Balancer");
-        stopButton = new JButton("Stop Load Balancer");
-        stopButton.setEnabled(false);
-        
-        startButton.addActionListener(e -> startLoadBalancer());
-        stopButton.addActionListener(e -> stopLoadBalancer());
+        buttonPanel.setBackground(new Color(250, 250, 255));
+        buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         
         // backend server buttons
-        startBackendServersButton = new JButton("Start Backend Servers");
-        stopBackendServersButton = new JButton("Stop Backend Servers");
+        startBackendServersButton = createStyledButton("Start Backend Servers", 
+            new Color(76, 175, 80), Color.WHITE);
+        stopBackendServersButton = createStyledButton("Stop Backend Servers", 
+            new Color(244, 67, 54), Color.WHITE);
         stopBackendServersButton.setEnabled(false);
         
         startBackendServersButton.addActionListener(e -> startBackendServers());
         stopBackendServersButton.addActionListener(e -> stopBackendServers());
         
+        // load balancer buttons
+        startButton = createStyledButton("Start Load Balancer", 
+            new Color(33, 150, 243), Color.WHITE);
+        stopButton = createStyledButton("Stop Load Balancer", 
+            new Color(244, 67, 54), Color.WHITE);
+        stopButton.setEnabled(false);
+        
+        startButton.addActionListener(e -> startLoadBalancer());
+        stopButton.addActionListener(e -> stopLoadBalancer());
+        
         buttonPanel.add(startBackendServersButton);
         buttonPanel.add(stopBackendServersButton);
-        buttonPanel.add(new JSeparator(SwingConstants.VERTICAL));
+        buttonPanel.add(new JSeparator(SwingConstants.VERTICAL) {
+            {
+                setPreferredSize(new Dimension(1, 30));
+                setBackground(new Color(200, 200, 200));
+            }
+        });
         buttonPanel.add(startButton);
         buttonPanel.add(stopButton);
         controlPanel.add(buttonPanel, BorderLayout.EAST);
         
-        add(controlPanel, BorderLayout.SOUTH);
+        return controlPanel;
+    }
+    
+    /**
+     * creates a styled button with colors
+     */
+    private JButton createStyledButton(String text, Color bgColor, Color textColor) {
+        JButton button = new JButton(text);
+        button.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        button.setBackground(bgColor);
+        button.setForeground(textColor);
+        button.setFocusPainted(false);
+        button.setBorderPainted(false);
+        button.setOpaque(true);
+        button.setPreferredSize(new Dimension(180, 35));
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        // hover effect
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                if (button.isEnabled()) {
+                    button.setBackground(bgColor.darker());
+                }
+            }
+            
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                if (button.isEnabled()) {
+                    button.setBackground(bgColor);
+                }
+            }
+        });
+        
+        return button;
     }
     
     /**
@@ -304,7 +463,7 @@ public class LoadBalancerGUI extends JFrame {
                             "Configuration Error", JOptionPane.ERROR_MESSAGE);
                         updateUIState(false);
                         statusLabel.setText("Status: Failed to start");
-                        statusLabel.setForeground(Color.RED);
+                        statusLabel.setForeground(new Color(244, 67, 54));
                     });
                     return;
                 }
@@ -338,7 +497,7 @@ public class LoadBalancerGUI extends JFrame {
                 if (currentLB != null) {
                     updateUIState(true);
                     statusLabel.setText("Status: Running on port " + port);
-                    statusLabel.setForeground(Color.GREEN);
+                    statusLabel.setForeground(new Color(76, 175, 80));
                     
                     // show success message
                     JOptionPane.showMessageDialog(this,
@@ -350,7 +509,7 @@ public class LoadBalancerGUI extends JFrame {
                 } else {
                     updateUIState(false);
                     statusLabel.setText("Status: Failed to start");
-                    statusLabel.setForeground(Color.RED);
+                    statusLabel.setForeground(new Color(244, 67, 54));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -359,14 +518,14 @@ public class LoadBalancerGUI extends JFrame {
                     "Error", JOptionPane.ERROR_MESSAGE);
                 updateUIState(false);
                 statusLabel.setText("Status: Error");
-                statusLabel.setForeground(Color.RED);
+                statusLabel.setForeground(new Color(244, 67, 54));
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(this,
                     "Error starting load balancer: " + e.getMessage(),
                     "Error", JOptionPane.ERROR_MESSAGE);
                 updateUIState(false);
                 statusLabel.setText("Status: Error");
-                statusLabel.setForeground(Color.RED);
+                statusLabel.setForeground(new Color(244, 67, 54));
             }
     }
     
@@ -379,7 +538,7 @@ public class LoadBalancerGUI extends JFrame {
         // for now, we'll just disable the UI
         updateUIState(false);
         statusLabel.setText("Status: Stopped");
-        statusLabel.setForeground(Color.RED);
+        statusLabel.setForeground(new Color(120, 120, 120));
         
         JOptionPane.showMessageDialog(this,
             "Note: Load balancer thread will continue running.\n" +
