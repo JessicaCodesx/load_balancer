@@ -28,25 +28,61 @@ public class LoadBalancer {
     public static void main(String[] args) {
         // default port is 8080 if not specified
         int port = 8080;
-        if (args.length > 0) {
-            port = Integer.parseInt(args[0]);
+        String algorithmName = "round-robin"; // default algorithm
+        List<String> backendServerArgs = new ArrayList<>();
+        
+        // parse command line arguments
+        // format: java LoadBalancer [port] [--algorithm round-robin|least-connections] [backend1:port] [backend2:port] ...
+        int argIndex = 0;
+        
+        // first arg might be port number
+        if (args.length > 0 && !args[0].startsWith("--")) {
+            try {
+                port = Integer.parseInt(args[0]);
+                argIndex = 1;
+            } catch (NumberFormatException e) {
+                // not a number, might be backend server
+            }
+        }
+        
+        // look for algorithm flag
+        while (argIndex < args.length) {
+            if (args[argIndex].equals("--algorithm") && argIndex + 1 < args.length) {
+                algorithmName = args[argIndex + 1].toLowerCase();
+                argIndex += 2;
+            } else {
+                // assume it's a backend server
+                backendServerArgs.add(args[argIndex]);
+                argIndex++;
+            }
         }
         
         LoadBalancer lb = new LoadBalancer(port);
         
+        // set the load balancing algorithm
+        if (algorithmName.equals("least-connections") || algorithmName.equals("least")) {
+            lb.setAlgorithm(new LeastConnectionsAlgorithm());
+            System.out.println("using least connections algorithm");
+        } else if (algorithmName.equals("round-robin") || algorithmName.equals("roundrobin")) {
+            lb.setAlgorithm(new RoundRobinAlgorithm());
+            System.out.println("using round-robin algorithm");
+        } else {
+            System.err.println("unknown algorithm: " + algorithmName + ", using round-robin");
+            lb.setAlgorithm(new RoundRobinAlgorithm());
+        }
+        
         // add backend servers
-        // format: host:port pairs as arguments, or use defaults
-        if (args.length > 1) {
+        if (!backendServerArgs.isEmpty()) {
             // parse backend servers from command line arguments
             // example: java LoadBalancer 8080 localhost:9001 localhost:9002 localhost:9003
-            for (int i = 1; i < args.length; i++) {
-                String[] parts = args[i].split(":");
+            for (String arg : backendServerArgs) {
+                String[] parts = arg.split(":");
                 if (parts.length == 2) {
                     String host = parts[0];
                     int backendPort = Integer.parseInt(parts[1]);
                     lb.addBackendServer(host, backendPort);
                 } else {
-                    System.err.println("invalid backend server format: " + args[i] + " (expected host:port)");
+                    System.err.println("invalid backend server format: " + arg + " (expected host:port)");
                 }
             }
         } else {
@@ -61,7 +97,7 @@ public class LoadBalancer {
         // check if we have any backend servers
         if (!lb.hasBackendServers()) {
             System.err.println("error: no backend servers configured!");
-            System.err.println("usage: java LoadBalancer [port] [backend1:port] [backend2:port] ...");
+            System.err.println("usage: java LoadBalancer [port] [--algorithm round-robin|least-connections] [backend1:port] [backend2:port] ...");
             System.exit(1);
         }
         
