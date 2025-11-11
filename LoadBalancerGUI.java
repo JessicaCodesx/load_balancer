@@ -10,7 +10,7 @@ import java.util.List;
  * displays statistics, server status, and provides controls
  */
 public class LoadBalancerGUI extends JFrame {
-    private LoadBalancer loadBalancer;
+    private volatile LoadBalancer loadBalancer;
     private Thread loadBalancerThread;
     
     // configuration components
@@ -172,13 +172,53 @@ public class LoadBalancerGUI extends JFrame {
      * starts the load balancer with current configuration
      */
     private void startLoadBalancer() {
+        // validate port number
+        int port;
         try {
-            int port = Integer.parseInt(portField.getText());
-            String algorithm = (String) algorithmCombo.getSelectedItem();
-            String[] backendLines = backendServersArea.getText().split("\n");
-            
-            // create load balancer in a separate thread
-            loadBalancerThread = new Thread(() -> {
+            port = Integer.parseInt(portField.getText().trim());
+            if (port < 1 || port > 65535) {
+                JOptionPane.showMessageDialog(this,
+                    "Port must be between 1 and 65535",
+                    "Invalid Port", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this,
+                "Invalid port number. Please enter a valid integer between 1 and 65535.",
+                "Invalid Port", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // validate backend servers
+        String[] backendLines = backendServersArea.getText().split("\n");
+        int validServerCount = 0;
+        for (String line : backendLines) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                String[] parts = trimmed.split(":");
+                if (parts.length == 2) {
+                    try {
+                        Integer.parseInt(parts[1]);
+                        validServerCount++;
+                    } catch (NumberFormatException e) {
+                        // invalid port, will be caught later
+                    }
+                }
+            }
+        }
+        
+        if (validServerCount == 0) {
+            JOptionPane.showMessageDialog(this,
+                "Please specify at least one backend server in the format: host:port\n" +
+                "Example: localhost:9001",
+                "No Backend Servers", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        String algorithm = (String) algorithmCombo.getSelectedItem();
+        
+        // create load balancer in a separate thread
+        loadBalancerThread = new Thread(() -> {
                 // create load balancer
                 loadBalancer = new LoadBalancer(port);
                 
@@ -190,6 +230,10 @@ public class LoadBalancerGUI extends JFrame {
                 }
                 
                 // add backend servers
+                int addedCount = 0;
+                int failedCount = 0;
+                StringBuilder errorMessages = new StringBuilder();
+                
                 for (String line : backendLines) {
                     final String trimmedLine = line.trim();
                     if (!trimmedLine.isEmpty()) {
@@ -199,16 +243,45 @@ public class LoadBalancerGUI extends JFrame {
                                 String host = parts[0];
                                 int backendPort = Integer.parseInt(parts[1]);
                                 loadBalancer.addBackendServer(host, backendPort);
+                                addedCount++;
                             } catch (NumberFormatException e) {
-                                final String errorLine = trimmedLine;
-                                SwingUtilities.invokeLater(() -> {
-                                    JOptionPane.showMessageDialog(this, 
-                                        "Invalid backend server format: " + errorLine + "\nExpected: host:port",
-                                        "Configuration Error", JOptionPane.ERROR_MESSAGE);
-                                });
+                                failedCount++;
+                                if (errorMessages.length() > 0) {
+                                    errorMessages.append("\n");
+                                }
+                                errorMessages.append("Invalid format: ").append(trimmedLine);
                             }
+                        } else {
+                            failedCount++;
+                            if (errorMessages.length() > 0) {
+                                errorMessages.append("\n");
+                            }
+                            errorMessages.append("Invalid format: ").append(trimmedLine).append(" (expected host:port)");
                         }
                     }
+                }
+                
+                // check if we have any valid servers
+                if (addedCount == 0) {
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(this,
+                            "No valid backend servers were added.\n\n" + errorMessages.toString(),
+                            "Configuration Error", JOptionPane.ERROR_MESSAGE);
+                        updateUIState(false);
+                        statusLabel.setText("Status: Failed to start");
+                        statusLabel.setForeground(Color.RED);
+                    });
+                    return;
+                }
+                
+                // show warning if some servers failed
+                if (failedCount > 0) {
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(this,
+                            "Added " + addedCount + " backend server(s).\n\n" +
+                            failedCount + " server(s) failed to add:\n" + errorMessages.toString(),
+                            "Partial Success", JOptionPane.WARNING_MESSAGE);
+                    });
                 }
                 
                 // start the load balancer
@@ -218,21 +291,41 @@ public class LoadBalancerGUI extends JFrame {
             loadBalancerThread.setDaemon(true);
             loadBalancerThread.start();
             
-            // wait a moment for initialization
+            // wait a moment for initialization and check if load balancer was created
             Thread.sleep(500);
             
-            updateUIState(true);
-            statusLabel.setText("Status: Running on port " + port);
-            statusLabel.setForeground(Color.GREEN);
+            // check if load balancer was created successfully
+            LoadBalancer currentLB = loadBalancer;
+            if (currentLB != null) {
+                updateUIState(true);
+                statusLabel.setText("Status: Running on port " + port);
+                statusLabel.setForeground(Color.GREEN);
+                
+                // show success message
+                JOptionPane.showMessageDialog(this,
+                    "Load balancer started successfully!\n\n" +
+                    "Port: " + port + "\n" +
+                    "Algorithm: " + algorithm + "\n" +
+                    "Backend servers configured",
+                    "Load Balancer Started", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                updateUIState(false);
+                statusLabel.setText("Status: Failed to start");
+                statusLabel.setForeground(Color.RED);
+            }
             
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, 
-                "Invalid port number. Please enter a valid integer.",
-                "Configuration Error", JOptionPane.ERROR_MESSAGE);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            JOptionPane.showMessageDialog(this,
+                "Interrupted while starting load balancer",
+                "Error", JOptionPane.ERROR_MESSAGE);
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, 
+            JOptionPane.showMessageDialog(this,
                 "Error starting load balancer: " + e.getMessage(),
                 "Error", JOptionPane.ERROR_MESSAGE);
+            updateUIState(false);
+            statusLabel.setText("Status: Error");
+            statusLabel.setForeground(Color.RED);
         }
     }
     
