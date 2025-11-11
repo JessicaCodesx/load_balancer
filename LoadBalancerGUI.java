@@ -326,42 +326,45 @@ public class LoadBalancerGUI extends JFrame {
             loadBalancerThread.setDaemon(true);
             loadBalancerThread.start();
             
-            // wait a moment for initialization and check if load balancer was created
-            Thread.sleep(500);
-            
-            // check if load balancer was created successfully
-            LoadBalancer currentLB = loadBalancer;
-            if (currentLB != null) {
-                updateUIState(true);
-                statusLabel.setText("Status: Running on port " + port);
-                statusLabel.setForeground(Color.GREEN);
+            try {
+                // wait a moment for initialization and check if load balancer was created
+                Thread.sleep(500);
                 
-                // show success message
+                // check if load balancer was created successfully
+                LoadBalancer currentLB = loadBalancer;
+                if (currentLB != null) {
+                    updateUIState(true);
+                    statusLabel.setText("Status: Running on port " + port);
+                    statusLabel.setForeground(Color.GREEN);
+                    
+                    // show success message
+                    JOptionPane.showMessageDialog(this,
+                        "Load balancer started successfully!\n\n" +
+                        "Port: " + port + "\n" +
+                        "Algorithm: " + algorithm + "\n" +
+                        "Backend servers configured",
+                        "Load Balancer Started", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    updateUIState(false);
+                    statusLabel.setText("Status: Failed to start");
+                    statusLabel.setForeground(Color.RED);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 JOptionPane.showMessageDialog(this,
-                    "Load balancer started successfully!\n\n" +
-                    "Port: " + port + "\n" +
-                    "Algorithm: " + algorithm + "\n" +
-                    "Backend servers configured",
-                    "Load Balancer Started", JOptionPane.INFORMATION_MESSAGE);
-            } else {
+                    "Interrupted while starting load balancer",
+                    "Error", JOptionPane.ERROR_MESSAGE);
                 updateUIState(false);
-                statusLabel.setText("Status: Failed to start");
+                statusLabel.setText("Status: Error");
+                statusLabel.setForeground(Color.RED);
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this,
+                    "Error starting load balancer: " + e.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+                updateUIState(false);
+                statusLabel.setText("Status: Error");
                 statusLabel.setForeground(Color.RED);
             }
-            
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            JOptionPane.showMessageDialog(this,
-                "Interrupted while starting load balancer",
-                "Error", JOptionPane.ERROR_MESSAGE);
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this,
-                "Error starting load balancer: " + e.getMessage(),
-                "Error", JOptionPane.ERROR_MESSAGE);
-            updateUIState(false);
-            statusLabel.setText("Status: Error");
-            statusLabel.setForeground(Color.RED);
-        }
     }
     
     /**
