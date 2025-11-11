@@ -41,7 +41,105 @@ public class LoadBalancer {
      */
     public void start() {
         System.out.println("load balancer starting on port " + loadBalancerPort);
-        // TODO: implement server socket and client handling
+        
+        try (ServerSocket serverSocket = new ServerSocket(loadBalancerPort)) {
+            System.out.println("load balancer listening on port " + loadBalancerPort);
+            
+            // keep accepting client connections
+            while (true) {
+                // wait for a client to connect
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("new client connected: " + clientSocket.getRemoteSocketAddress());
+                
+                // handle each client in a separate thread so we can handle multiple clients
+                new Thread(() -> handleClient(clientSocket)).start();
+            }
+        } catch (IOException e) {
+            System.err.println("error starting load balancer: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * handles a client connection by forwarding it to a backend server
+     * @param clientSocket the socket connected to the client
+     */
+    private void handleClient(Socket clientSocket) {
+        try {
+            // select which backend server to use based on the algorithm
+            BackendServer backend = algorithm.selectServer(backendServers);
+            
+            if (backend == null) {
+                System.err.println("no backend servers available");
+                clientSocket.close();
+                return;
+            }
+            
+            System.out.println("forwarding client to backend: " + backend);
+            
+            // connect to the selected backend server
+            Socket backendSocket = new Socket(backend.getHost(), backend.getPort());
+            
+            // forward data between client and backend in both directions
+            // this runs in separate threads so both directions work simultaneously
+            Thread clientToBackend = new Thread(() -> {
+                try {
+                    forwardData(clientSocket.getInputStream(), backendSocket.getOutputStream());
+                } catch (IOException e) {
+                    // connection closed, that's ok
+                }
+            });
+            
+            Thread backendToClient = new Thread(() -> {
+                try {
+                    forwardData(backendSocket.getInputStream(), clientSocket.getOutputStream());
+                } catch (IOException e) {
+                    // connection closed, that's ok
+                }
+            });
+            
+            clientToBackend.start();
+            backendToClient.start();
+            
+            // wait for both forwarding threads to finish
+            clientToBackend.join();
+            backendToClient.join();
+            
+            // close connections when done
+            clientSocket.close();
+            backendSocket.close();
+            
+            System.out.println("client connection closed");
+            
+        } catch (Exception e) {
+            System.err.println("error handling client: " + e.getMessage());
+            e.printStackTrace();
+            try {
+                clientSocket.close();
+            } catch (IOException ioException) {
+                // ignore
+            }
+        }
+    }
+    
+    /**
+     * forwards data from input stream to output stream
+     * @param input the stream to read from
+     * @param output the stream to write to
+     */
+    private void forwardData(InputStream input, OutputStream output) {
+        try {
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            
+            // read data and write it to the other stream
+            while ((bytesRead = input.read(buffer)) != -1) {
+                output.write(buffer, 0, bytesRead);
+                output.flush();
+            }
+        } catch (IOException e) {
+            // connection closed or error, stop forwarding
+        }
     }
     
     /**
